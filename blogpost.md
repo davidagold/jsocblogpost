@@ -70,65 +70,13 @@ julia> @time f(X)
 Nullable(2.500102419334644e6)
 ```
 
-As can be seen, naively looping over a `NullableArray` is on the same order of magnitude as naively looping over a regular `Array` in terms of both time elapsed and memory allocated. Below is a set of plots that visualize the results of running 20 benchmark samples of `f` over both `NullableArray` and `DataArray` arguments each consisting of 5,000,000 random `Float64` values and containing either zero null entries or approximately half randomly chosen null entries.
+As can be seen, naively looping over a `NullableArray` is on the same order of magnitude as naively looping over a regular `Array` in terms of both time elapsed and memory allocated. Below is a set of plots (drawn with [Gadfly.jl](https://github.com/dcjones/Gadfly.jl)) that visualize the results of running 20 benchmark samples of `f` over both `NullableArray` and `DataArray` arguments each consisting of 5,000,000 random `Float64` values and containing either zero null entries or approximately half randomly chosen null entries.
 
+![](https://github.com/davidagold/jsocblogpost/blob/master/f_plot.png)
 
+Of course, it is possible to bring the performance of such a loop over a `DataArray` up to par with that of a loop over an `Array`. But such optimizations generally introduce additional complexity that oughtn’t to be required to achieve acceptable performance in such a simple task. Considerably more complex code can be required to achieve performance in more involved implementations, such as that of `broadcast!`. We intend for `NullableArray`s to to perform well under involved tasks involving missing data while requiring as little interaction with `NullableArray` internals as possible. This includes allowing users to leverage extant implementations without sacrificing performance. Consider for instance the results of relying on Base’s implementation of `broadcast!` for `DataArray` and `NullableArray` arguments (i.e., having omitted the respective `src/broadcast.jl` from each package’s source code). Below are plots that visualize the results of running 20 benchmark samples of `broadcast!(dest, src1, src2)`, where `dest` and `src2` are `5_000_000 x 2` `Array`s, `NullableArray`s or `DataArray`s, and `src1` is a `5_000_000 x 1` `Array`, `NullableArray` or `DataArray`. As above, the `NullableArray` and `DataArray` arguments are tested in cases with either zero or approximately half null entries:
 
-Of course, it is possible to bring the performance of such a loop over a `DataArray` up to par with that of a loop over an `Array`. But such optimizations generally introduce additional complexity that oughtn’t to be required to achieve acceptable performance in such a simple task. Considerably more complex code can be required to achieve performance in more involved implementations, such as that of `broadcast!`. We intend for `NullableArray`s to to perform well under involved tasks involving missing data while requiring as little interaction with `NullableArray` internals as possible. This includes allowing users to leverage extant implementations without sacrificing performance. Consider for instance the results of relying on Base’s implementation of `broadcast!` for `DataArray` and `NullableArray` arguments (i.e., having omitted the respective `src/broadcast.jl` from each package’s source code):
-
-```julia
-julia> f(x, y) = x * y
-f (generic function with 1 method)
-
-### broadcast! over DataArrays
-
-julia> A = rand(5_000_000); B = rand(5_000_000, 2);
-
-julia> M = rand(Bool, 5_000_000, 2);
-
-julia> D = DataArray(A); E = DataArray(B);
-
-julia> F = DataArray(Float64, 5_000_000, 2);
-
-julia> @which broadcast!(f, F, D, E)
-broadcast!(f, B, As...) at broadcast.jl:221
-
-julia> broadcast!(f, F, D, E); @time broadcast!(f, F, D, E);
-  1.320112 seconds (50.00 M allocations: 915.512 MB, 9.35% gc time)
-
-julia> G = DataArray(B, M); # G is a DataArray w/ approx. half missing entries
-
-julia> @time broadcast!(f, F, D, G);
-  1.345522 seconds (40.04 M allocations: 765.081 MB, 7.66% gc time)
-
-### broadcast! over NullableArrays
-
-julia> X = NullableArray(A); Y = NullableArray(B);
-
-julia> Z = NullableArray(Float64, 5_000_000, 2);
-
-julia> @which broadcast!(f, Z, X, Y)
-broadcast!(f, B, As...) at broadcast.jl:221
-
-julia> broadcast!(f, Z, X, Y); @time broadcast!(f, Z, X, Y);
-  0.132489 seconds (194 allocations: 12.308 KB)
-
-julia> U = NullableArray(B, M); # G is a NullableArray w/ approx. half missing entries
-
-julia> @time broadcast!(f, Z, X, U);
-  0.218909 seconds (14 allocations: 416 bytes)
-```
-
-By way of comparison, here is the performance over `Array`s:
-
-```julia
-julia> C = Array(Float64, 5_000_000, 2);
-
-julia> @time broadcast!(f, C, A, B);
-  0.029869 seconds (14 allocations: 416 bytes)
-```
-
-In this case, the time elapsed while `broadcast!`ing over `NullableArray`s with zero null entries is within a multiple of five, and within an order of ten for `NullableArray`s with approximately half null entries. The former is ten times faster than `broadcast!`ing over `DataArray`s in general and allocates orders of magnitude less memory.
+![](https://github.com/davidagold/jsocblogpost/blob/master/bcast_plot.png)
 
 We have designed the `NullableArray` type to feel as much like a regular `Array` as possible. However, that `NullableArray`s return `Nullable` objects is a significant departure from both `Array` and `DataArray` behavior. Arguably the most important issue is to support user-defined functions that lack methods for `Nullable` arguments as they interact with `Nullable` and `NullableArray` objects. Throughout my project I have also worked to develop interfaces that make dealing with `Nullable` objects user-friendly and safe.
 
